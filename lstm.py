@@ -27,30 +27,31 @@ def train_network():
 
 def get_notes():
     """ Get all the notes and chords from the midi files in the ./midi_songs directory """
-    notes = []
+#     notes = []
 
-    for file in glob.glob("midi_songs/*.mid"):
-        midi = converter.parse(file)
+#     for file in glob.glob("midi_songs/*.mid"):
+#         midi = converter.parse(file)
 
-        print("Parsing %s" % file)
+#         print("Parsing %s" % file)
 
-        notes_to_parse = None
+#         notes_to_parse = None
 
-        try: # file has instrument parts
-            s2 = instrument.partitionByInstrument(midi)
-            notes_to_parse = s2.parts[0].recurse() 
-        except: # file has notes in a flat structure
-            notes_to_parse = midi.flat.notes
+#         try: # file has instrument parts
+#             s2 = instrument.partitionByInstrument(midi)
+#             notes_to_parse = s2.parts[0].recurse() 
+#         except: # file has notes in a flat structure
+#             notes_to_parse = midi.flat.notes
 
-        for element in notes_to_parse:
-            if isinstance(element, note.Note):
-                notes.append(str(element.pitch))
-            elif isinstance(element, chord.Chord):
-                notes.append('.'.join(str(n) for n in element.normalOrder))
+#         for element in notes_to_parse:
+#             if isinstance(element, note.Note):
+#                 notes.append(str(element.pitch))
+#             elif isinstance(element, chord.Chord):
+#                 notes.append('.'.join(str(n) for n in element.normalOrder))
 
-    with open('data/notes', 'wb') as filepath:
-        pickle.dump(notes, filepath)
-
+#     with open('data/notes', 'wb') as filepath:
+#         pickle.dump(notes, filepath)
+    with open('./data/notes_bach', 'rb') as filepath:
+        notes = pickle.load(filepath)
     return notes
 
 def prepare_sequences(notes, n_vocab):
@@ -101,7 +102,7 @@ def create_network(network_input, n_vocab):
     model.add(Dense(n_vocab))
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
-
+#     model.load_weights('weights-improvement-02-4.0879-bigger.hdf5')
     return model
 
 def train(model, network_input, network_output):
@@ -116,7 +117,7 @@ def train(model, network_input, network_output):
     )
     callbacks_list = [checkpoint]
 
-    model.fit(network_input, network_output, epochs=200, batch_size=64, callbacks=callbacks_list)
+    model.fit(network_input, network_output, epochs=200, batch_size=500, callbacks=callbacks_list)
 
 if __name__ == '__main__':
     train_network()

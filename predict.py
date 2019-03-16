@@ -2,6 +2,7 @@
     trained neural network """
 import pickle
 import numpy
+import datetime
 from music21 import instrument, note, stream, chord
 from keras.models import Sequential
 from keras.layers import Dense
@@ -12,7 +13,7 @@ from keras.layers import Activation
 def generate():
     """ Generate a piano midi file """
     #load the notes used to train the model
-    with open('data/notes', 'rb') as filepath:
+    with open('data/notes_bach', 'rb') as filepath:
         notes = pickle.load(filepath)
 
     # Get all pitch names
@@ -67,7 +68,7 @@ def create_network(network_input, n_vocab):
     model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
 
     # Load the weights to each node
-    model.load_weights('weights.hdf5')
+    model.load_weights('weights-improvement-01-4.2199-bigger.hdf5')
 
     return model
 
@@ -127,8 +128,8 @@ def create_midi(prediction_output):
         offset += 0.5
 
     midi_stream = stream.Stream(output_notes)
-
-    midi_stream.write('midi', fp='test_output.mid')
+    filename = 'out_{}.mid'.format(datetime.datetime.today().strftime('%Y-%m-%d-%H-%M-%S'))
+    midi_stream.write('midi', fp=filename)
 
 if __name__ == '__main__':
     generate()
