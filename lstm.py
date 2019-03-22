@@ -2,7 +2,7 @@
     network for training """
 import glob
 import pickle
-import numpy
+import numpy as np
 from music21 import converter, instrument, note, chord
 from keras.models import Sequential
 from keras.layers import Dense
@@ -11,81 +11,87 @@ from keras.layers import LSTM
 from keras.layers import Activation
 from keras.utils import np_utils
 from keras.callbacks import ModelCheckpoint
+from fractions import Fraction
+from sklearn.preprocessing import MultiLabelBinarizer
+
 
 def train_network():
     """ Train a Neural Network to generate music """
     notes = get_notes()
+    
+    network_input, network_output = prepare_sequences(notes)
 
-    # get amount of pitch names
-    n_vocab = len(set(notes))
-
-    network_input, network_output = prepare_sequences(notes, n_vocab)
-
-    model = create_network(network_input, n_vocab)
+    model = create_network(network_input)
 
     train(model, network_input, network_output)
 
 def get_notes():
     """ Get all the notes and chords from the midi files in the ./midi_songs directory """
-#     notes = []
+#     parsed_notes = []
 
-#     for file in glob.glob("midi_songs/*.mid"):
-#         midi = converter.parse(file)
+#     for file in np.random.choice(glob.glob("/code/dl/Classical-Piano-Composer/midi_songs_bc/*.mid"), 3):
+#         midi_data = converter.parse(file)
 
 #         print("Parsing %s" % file)
 
-#         notes_to_parse = None
+#         ss = midi_data.flat
 
-#         try: # file has instrument parts
-#             s2 = instrument.partitionByInstrument(midi)
-#             notes_to_parse = s2.parts[0].recurse() 
-#         except: # file has notes in a flat structure
-#             notes_to_parse = midi.flat.notes
+#         notes = ss.getElementsByClass(['Chord', 'Note'])
+#         parsed_notes.extend(notes)
+        
+#     off_sets = [note.offset for note in parsed_notes]
 
-#         for element in notes_to_parse:
-#             if isinstance(element, note.Note):
-#                 notes.append(str(element.pitch))
-#             elif isinstance(element, chord.Chord):
-#                 notes.append('.'.join(str(n) for n in element.normalOrder))
+#     note_dict = {}
 
-#     with open('data/notes', 'wb') as filepath:
-#         pickle.dump(notes, filepath)
-    with open('./data/notes_bach', 'rb') as filepath:
-        notes = pickle.load(filepath)
-    return notes
+#     for note in parsed_notes:
+#         offset = note.offset
+#         if isinstance(offset, Fraction):
+#                 offset = np.round(float(offset),2)
+#         if note.offset in note_dict:
+#             if not note.isChord:
+#                 note_dict[offset].append(note.nameWithOctave.replace('-', ''))
+#             else:
+#                 note_dict[offset].extend([p.nameWithOctave.replace('-', '') for p in note.pitches])
+#         else:
+#             if not note.isChord:
+#                 note_dict[offset] = [note.nameWithOctave.replace('-', '')]
+#             else:
+#                 note_dict[offset] = [p.nameWithOctave.replace('-', '') for p in note.pitches]
 
-def prepare_sequences(notes, n_vocab):
+
+#     for offset in note_dict:
+#         note_dict[offset] = list(set(note_dict[offset]))
+
+#     values = [v for v in note_dict.values()]
+    
+#     mb = MultiLabelBinarizer()
+#     all_values_binary = mb.fit_transform(values)
+#     training_data = {'data': all_values_binary, 'binarizer': mb}
+#     print(all_values_binary.shape)
+#     with open('data/training_data_bach', 'wb') as filepath:
+#         pickle.dump(training_data, filepath)
+    with open('./data/training_data_bach', 'rb') as filepath:
+        all_values_binary = pickle.load(filepath)['data']
+    return all_values_binary
+
+def prepare_sequences(notes):
     """ Prepare the sequences used by the Neural Network """
-    sequence_length = 100
-
-    # get all pitch names
-    pitchnames = sorted(set(item for item in notes))
-
-     # create a dictionary to map pitches to integers
-    note_to_int = dict((note, number) for number, note in enumerate(pitchnames))
-
+    sequence_length = 32
     network_input = []
     network_output = []
 
-    # create input sequences and the corresponding outputs
-    for i in range(0, len(notes) - sequence_length, 1):
+    for i in range(0, notes.shape[0] - sequence_length, 1):
         sequence_in = notes[i:i + sequence_length]
         sequence_out = notes[i + sequence_length]
-        network_input.append([note_to_int[char] for char in sequence_in])
-        network_output.append(note_to_int[sequence_out])
+        network_input.append(sequence_in)
+        network_output.append(sequence_out)
 
-    n_patterns = len(network_input)
-
-    # reshape the input into a format compatible with LSTM layers
-    network_input = numpy.reshape(network_input, (n_patterns, sequence_length, 1))
-    # normalize input
-    network_input = network_input / float(n_vocab)
-
-    network_output = np_utils.to_categorical(network_output)
+    network_input = np.array(network_input)
+    network_output = np.array(network_output)
 
     return (network_input, network_output)
 
-def create_network(network_input, n_vocab):
+def create_network(network_input):
     """ create the structure of the neural network """
     model = Sequential()
     model.add(LSTM(
@@ -93,16 +99,16 @@ def create_network(network_input, n_vocab):
         input_shape=(network_input.shape[1], network_input.shape[2]),
         return_sequences=True
     ))
-    model.add(Dropout(0.3))
+    model.add(Dropout(0.2))
     model.add(LSTM(512, return_sequences=True))
-    model.add(Dropout(0.3))
+    model.add(Dropout(0.2))
     model.add(LSTM(512))
     model.add(Dense(256))
-    model.add(Dropout(0.3))
-    model.add(Dense(n_vocab))
+    model.add(Dropout(0.2))
+    model.add(Dense(network_input.shape[2]))
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='rmsprop')
-#     model.load_weights('weights-improvement-02-4.0879-bigger.hdf5')
+    model.load_weights('weights-improvement-30-1.5473-bigger.hdf5')
     return model
 
 def train(model, network_input, network_output):
@@ -117,7 +123,7 @@ def train(model, network_input, network_output):
     )
     callbacks_list = [checkpoint]
 
-    model.fit(network_input, network_output, epochs=200, batch_size=500, callbacks=callbacks_list)
+    model.fit(network_input, network_output, epochs=400, batch_size=32, callbacks=callbacks_list)
 
 if __name__ == '__main__':
     train_network()
